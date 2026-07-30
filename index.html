@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Thinking…</title>
+<style>
+  :root{
+    --bg: #0A0C10;
+    --ink: #E8ECF2;
+    --title-ink: #E8ECF2;
+    --reveal-ink: #E8ECF2;
+    --reveal-bg: #0A0C10;
+    --ghost: #454B54;
+    --title-op: 1;
+    --reveal-op: 1;
+    --title-x: 0px; --title-y: 0px;
+    --reveal-x: 0px; --reveal-y: 0px;
+    --tension-scale: 1;
+    --dot-scale: 1;
+    --title-scale: 1;
+    --reveal-scale: 1;
+    --ghost-scale: 1;
+    --pulse-ms: 520ms;
+    --panel-bg: rgba(14,17,23,0.94);
+    --panel-line: rgba(255,255,255,0.08);
+    --panel-ink: #C7CED9;
+    --panel-mute: #7A8496;
+    --panel-accent: #5B8DEF;
+  }
+
+  *{ box-sizing:border-box; }
+  html,body{ height:100%; margin:0; }
+
+  body{
+    background: radial-gradient(120vmax 90vmax at 50% 42%, rgba(255,255,255,0.035), transparent 60%), var(--bg);
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    overflow: hidden; -webkit-font-smoothing: antialiased; cursor: default; user-select: none;
+  }
+  body.reveal-scene{ background: var(--reveal-bg); }   /* hard-cut high-contrast reveal */
+  body.cursor-hidden{ cursor: none; }
+
+  #stage{ position: fixed; inset: 0; display: grid; place-items: center; z-index: 1; }
+
+  #ghost-field{
+    position: fixed; inset: -6vh 0; overflow: hidden; z-index: 0; pointer-events: none;
+    -webkit-mask-image: linear-gradient(180deg, transparent, #000 12%, #000 88%, transparent);
+            mask-image: linear-gradient(180deg, transparent, #000 12%, #000 88%, transparent);
+  }
+  .ghost-line{
+    position: absolute;
+    font-family: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    font-size: calc(clamp(11px, 1.4vmin, 21px) * var(--ghost-scale));
+    letter-spacing: 0.02em; color: var(--ghost); opacity: 0; max-width: 62vw;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; will-change: transform, opacity;
+  }
+
+  #title-wrap{
+    position: relative; display: flex; align-items: baseline; gap: 0.06em; line-height: 1;
+    transform: translate(var(--title-x), var(--title-y)) scale(var(--tension-scale));
+    transition: none;
+  }
+  #word{
+    font-weight: 300; letter-spacing: 0.01em;
+    color: var(--title-ink); opacity: var(--title-op);
+    font-size: calc(clamp(2.6rem, 11vmin, 12rem) * var(--title-scale));
+  }
+  #word em{ font-style: italic; } #word strong{ font-weight: 700; }
+  #dots{ display:inline-flex; align-items:baseline; gap:0.14em; margin-left:0.12em; transform: translateY(-0.02em); }
+  .dot{
+    width: calc(clamp(9px, 1.7vmin, 26px) * var(--dot-scale));
+    height: calc(clamp(9px, 1.7vmin, 26px) * var(--dot-scale));
+    border-radius: 50%; background: var(--ghost); opacity: 0.35; transform: scale(0.82);
+    transition: opacity var(--pulse-ms) ease, transform var(--pulse-ms) ease,
+                background-color var(--pulse-ms) ease, box-shadow var(--pulse-ms) ease;
+  }
+  .dot.on{ opacity: 1; transform: scale(1.25); }
+
+  #final{
+    position: absolute; inset: 0; display: grid; place-items: center; text-align: center;
+    padding: 0 8vw; opacity: 0; visibility: hidden; pointer-events: none; transition: none;
+    color: var(--reveal-ink); font-weight: 300; letter-spacing: 0.01em;
+    transform: translate(var(--reveal-x), var(--reveal-y));
+    font-size: calc(clamp(2rem, 9vmin, 9rem) * var(--reveal-scale));
+  }
+  #final em{ font-style: italic; } #final strong{ font-weight: 700; }
+  #stage.finished #title-wrap{ opacity: 0; visibility: hidden; }
+  #stage.finished #final{ opacity: var(--reveal-op); visibility: visible; }
+
+  #stage-progress{ position: fixed; left:0; bottom:0; height:2px; width:0%;
+    background: linear-gradient(90deg, transparent, currentColor); color: var(--panel-accent);
+    opacity:0; transition: opacity 300ms ease; z-index:2; pointer-events:none; }
+  #stage-progress.show{ opacity: 0.55; }
+
+  #flash{ position: fixed; inset:0; background:#fff; opacity:0; pointer-events:none; z-index:45; }
+  #blackout{ position: fixed; inset:0; background:#000; opacity:0; pointer-events:none; transition: opacity 220ms ease; z-index:50; }
+  #blackout.on{ opacity: 1; }
+
+  #hint{ position: fixed; left:50%; bottom:4vh; transform: translateX(-50%);
+    font-size:12px; letter-spacing:0.14em; text-transform:uppercase; color:var(--panel-mute);
+    background: rgba(0,0,0,0.35); padding:7px 14px; border-radius:999px; z-index:40; transition: opacity 600ms ease; }
+  #hint.gone{ opacity: 0; pointer-events: none; }
+
+  #panel{ position: fixed; top:0; left:0; bottom:0; width: min(374px, 92vw);
+    background: var(--panel-bg); border-right:1px solid var(--panel-line);
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    color: var(--panel-ink); z-index:60; transform: translateX(-102%);
+    transition: transform 320ms cubic-bezier(.22,.61,.36,1); display:flex; flex-direction:column; font-size:13px; }
+  #panel.open{ transform: translateX(0); }
+  .panel-head{ display:flex; align-items:center; justify-content:space-between; padding:16px 18px 12px; border-bottom:1px solid var(--panel-line); }
+  .panel-head h1{ margin:0; font-size:13px; font-weight:600; letter-spacing:0.16em; text-transform:uppercase; color:var(--ink); }
+  .panel-head .k{ color:var(--panel-mute); font-size:11px; letter-spacing:0.08em; }
+  .panel-body{ padding:6px 18px 22px; overflow-y:auto; }
+  .group{ padding:14px 0; border-bottom:1px solid var(--panel-line); }
+  .group:last-child{ border-bottom:0; }
+  .group > .label{ font-size:10px; letter-spacing:0.18em; text-transform:uppercase; color:var(--panel-mute); margin-bottom:10px; }
+  .hint-sm{ font-size:11px; color:var(--panel-mute); margin:2px 0 0; }
+
+  .row{ display:flex; align-items:center; gap:10px; margin:9px 0; }
+  .row label{ flex:0 0 auto; color:var(--panel-mute); min-width:92px; }
+  .row .val{ margin-left:auto; color:var(--panel-ink); font-variant-numeric:tabular-nums; min-width:52px; text-align:right; }
+
+  input[type="text"]{ flex:1 1 auto; background:rgba(255,255,255,0.05); border:1px solid var(--panel-line);
+    color:var(--ink); border-radius:8px; padding:8px 10px; font:inherit; min-width:0; }
+  input[type="text"]:focus{ outline:none; border-color:var(--panel-accent); }
+  input[type="range"]{ flex:1 1 auto; accent-color: var(--panel-accent); }
+  input[type="color"]{ flex:0 0 auto; width:40px; height:26px; padding:0; border:1px solid var(--panel-line);
+    border-radius:7px; background:transparent; cursor:pointer; }
+  input[type="color"]::-webkit-color-swatch-wrapper{ padding:2px; }
+  input[type="color"]::-webkit-color-swatch{ border:none; border-radius:5px; }
+
+  .btn{ appearance:none; border:1px solid var(--panel-line); background:rgba(255,255,255,0.05);
+    color:var(--ink); border-radius:9px; padding:10px 12px; font:inherit; cursor:pointer;
+    letter-spacing:0.02em; transition: background 140ms ease, border-color 140ms ease; }
+  .btn:hover{ background: rgba(255,255,255,0.1); }
+  .btn:focus-visible{ outline:2px solid var(--panel-accent); outline-offset:2px; }
+  .btn.primary{ background:var(--panel-accent); border-color:var(--panel-accent); color:#fff; font-weight:600; }
+  .btn.primary:hover{ filter:brightness(1.08); }
+  .btn.sm{ padding:7px 10px; font-size:12px; }
+  .btn.active{ background: var(--panel-accent); border-color: var(--panel-accent); color:#fff; }
+  .btn-row{ display:flex; gap:8px; }
+  .btn-row .btn{ flex:1; text-align:center; }
+
+  .swatches{ display:flex; gap:8px; flex-wrap:wrap; }
+  .swatch{ flex:1 1 auto; min-width:70px; cursor:pointer; border-radius:9px; border:1px solid var(--panel-line);
+    padding:8px; background:rgba(255,255,255,0.03); display:flex; align-items:center; gap:8px; font-size:12px; color:var(--panel-ink); }
+  .swatch.active{ border-color:var(--panel-accent); }
+  .swatch .chips{ display:flex; } .swatch .chips i{ width:12px; height:12px; border-radius:50%; margin-left:-3px; box-shadow:0 0 0 1px rgba(0,0,0,.4); }
+
+  .toggle{ display:flex; align-items:center; gap:10px; cursor:pointer; margin:9px 0; }
+  .toggle input{ position:absolute; opacity:0; pointer-events:none; }
+  .toggle .track{ width:38px; height:22px; border-radius:999px; background:rgba(255,255,255,0.12); position:relative; transition:background 160ms ease; flex:0 0 auto; }
+  .toggle .track::after{ content:""; position:absolute; top:2px; left:2px; width:18px; height:18px; border-radius:50%; background:#fff; transition:transform 160ms ease; }
+  .toggle input:checked + .track{ background:var(--panel-accent); }
+  .toggle input:checked + .track::after{ transform:translateX(16px); }
+  .toggle input:focus-visible + .track{ outline:2px solid var(--panel-accent); outline-offset:2px; }
+
+  .keys{ display:grid; grid-template-columns:auto 1fr; gap:6px 12px; color:var(--panel-mute); font-size:12px; }
+  .keys kbd{ font-family: ui-monospace, Menlo, Consolas, monospace; font-size:11px; background:rgba(255,255,255,0.07); border:1px solid var(--panel-line); border-radius:5px; padding:2px 7px; color:var(--panel-ink); justify-self:start; }
+
+  .status{ display:flex; align-items:baseline; gap:8px; margin-top:4px; }
+  .status .big{ font-size:30px; font-weight:300; font-variant-numeric:tabular-nums; letter-spacing:0.02em; color:var(--ink); }
+  .status .tag{ font-size:10px; letter-spacing:0.16em; text-transform:uppercase; color:var(--panel-mute); border:1px solid var(--panel-line); border-radius:999px; padding:3px 9px; margin-left:auto; }
+  .status .tag.run{ color:#7EE0A8; border-color:rgba(126,224,168,0.35); }
+
+  @media (prefers-reduced-motion: reduce){ .ghost-line, .dot, #panel{ transition-duration: 0.001ms !important; } }
+</style>
+</head>
+<body>
+
+  <div id="ghost-field" aria-hidden="true"></div>
+  <div id="stage">
+    <div id="title-wrap">
+      <span id="word">Thinking</span>
+      <span id="dots"></span>
+    </div>
+    <div id="final"></div>
+  </div>
+  <div id="stage-progress"></div>
+  <div id="flash"></div>
+  <div id="blackout"></div>
+  <div id="hint">Press&nbsp; <b>H</b> &nbsp;for controls</div>
+
+  <aside id="panel" aria-label="Producer controls">
+    <div class="panel-head"><h1>Thinking · Console</h1><span class="k">H&nbsp;to hide</span></div>
+    <div class="panel-body">
+
+      <div class="group">
+        <div class="label">Playback</div>
+        <div class="status"><span class="big" id="clock">0:05</span><span class="tag" id="state-tag">Idle</span></div>
+        <div class="btn-row" style="margin-top:12px;">
+          <button class="btn primary" id="startBtn">Begin countdown</button>
+          <button class="btn" id="resetBtn">Reset</button>
+        </div>
+        <div class="row" style="margin-top:14px;"><label for="dur">Duration</label><input id="dur" type="text" inputmode="numeric" value="0:05" style="max-width:96px;"><span class="val">m:ss</span></div>
+      </div>
+
+      <div class="group">
+        <div class="label">Text</div>
+        <div class="row"><label for="word-in">Title</label><input id="word-in" type="text" value="*Thinking*"></div>
+        <div class="row"><label for="final-in">Reveal</label><input id="final-in" type="text" value="Thought." placeholder="Final message"></div>
+        <p class="hint-sm">Markdown: **bold**, *italic*</p>
+      </div>
+
+      <div class="group">
+        <div class="label">Type size</div>
+        <div class="row"><label for="tScale">Title</label><input id="tScale" type="range" min="0.3" max="3" step="0.05" value="0.9"><span class="val" id="tScale-val">0.90×</span></div>
+        <div class="row"><label for="rScale">Reveal</label><input id="rScale" type="range" min="0.3" max="3" step="0.05" value="0.4"><span class="val" id="rScale-val">0.40×</span></div>
+        <div class="row"><label for="gScale">Background</label><input id="gScale" type="range" min="0.5" max="2.4" step="0.05" value="1.4"><span class="val" id="gScale-val">1.40×</span></div>
+      </div>
+
+      <div class="group">
+        <div class="label">Text position</div>
+        <div class="row"><label for="tX">Title X</label><input id="tX" type="range" min="-45" max="45" step="1" value="0"><span class="val" id="tX-val">0</span></div>
+        <div class="row"><label for="tY">Title Y</label><input id="tY" type="range" min="-45" max="45" step="1" value="0"><span class="val" id="tY-val">0</span></div>
+        <div class="row"><label for="rX">Reveal X</label><input id="rX" type="range" min="-45" max="45" step="1" value="0"><span class="val" id="rX-val">0</span></div>
+        <div class="row"><label for="rY">Reveal Y</label><input id="rY" type="range" min="-45" max="45" step="1" value="0"><span class="val" id="rY-val">0</span></div>
+      </div>
+
+      <div class="group">
+        <div class="label">Colour · thinking scene</div>
+        <div class="row"><label for="bgCol">Background</label><input id="bgCol" type="color" value="#0a0c10"><span class="val" id="bgCol-val">#0a0c10</span></div>
+        <div class="row"><label for="titleCol">Title</label><input id="titleCol" type="color" value="#e8ecf2"><span class="val" id="titleCol-val">#e8ecf2</span></div>
+        <div class="row"><label for="titleOp">Title opacity</label><input id="titleOp" type="range" min="0" max="100" step="1" value="100"><span class="val" id="titleOp-val">1.00</span></div>
+        <div class="row"><label for="ghostCol">Wall text</label><input id="ghostCol" type="color" value="#454b54"><span class="val" id="ghostCol-val">#454b54</span></div>
+      </div>
+
+      <div class="group">
+        <div class="label">Colour · reveal scene</div>
+        <div class="row"><label for="revBg">Background</label><input id="revBg" type="color" value="#0a0c10"><span class="val" id="revBg-val">#0a0c10</span></div>
+        <div class="row"><label for="revInk">Text</label><input id="revInk" type="color" value="#e8ecf2"><span class="val" id="revInk-val">#e8ecf2</span></div>
+        <div class="row"><label for="revOp">Text opacity</label><input id="revOp" type="range" min="0" max="100" step="1" value="100"><span class="val" id="revOp-val">1.00</span></div>
+        <div class="btn-row" style="margin-top:8px;">
+          <button class="btn sm" id="blindBtn">White-out preset</button>
+          <button class="btn sm" id="matchBtn">Match thinking</button>
+        </div>
+        <p class="hint-sm">The cut is instant — set white bg + black text to blind the room.</p>
+      </div>
+
+      <div class="group">
+        <div class="label">Ellipsis palette</div>
+        <div class="swatches" id="swatches"></div>
+      </div>
+
+      <div class="group">
+        <div class="label">Ellipsis</div>
+        <div class="row"><label for="pulse">Pulse</label><input id="pulse" type="range" min="120" max="1100" step="10" value="150"><span class="val" id="pulse-val">150ms</span></div>
+        <div class="row"><label for="dotCount">Count</label><input id="dotCount" type="range" min="1" max="8" step="1" value="3"><span class="val" id="dotCount-val">3</span></div>
+        <div class="row"><label for="dotScale">Size</label><input id="dotScale" type="range" min="0.4" max="3" step="0.05" value="1"><span class="val" id="dotScale-val">1.00×</span></div>
+      </div>
+
+      <div class="group">
+        <div class="label">Background wall</div>
+        <div class="row"><label for="density">Density</label><input id="density" type="range" min="0" max="12" step="1" value="12"><span class="val" id="density-val">12</span></div>
+        <div class="row"><label for="ghosta">Visibility</label><input id="ghosta" type="range" min="0" max="60" step="1" value="60"><span class="val" id="ghosta-val">0.60</span></div>
+        <div class="row"><label for="drift">Drift</label><input id="drift" type="range" min="6" max="30" step="1" value="30"><span class="val" id="drift-val">30s</span></div>
+      </div>
+
+      <div class="group">
+        <div class="label">Drama</div>
+        <label class="toggle"><input type="checkbox" id="buildToggle" checked><span class="track"></span><span>Build tension into the cut</span></label>
+        <label class="toggle"><input type="checkbox" id="ticksToggle" checked><span class="track"></span><span>Countdown ticks (last 3s)</span></label>
+        <label class="toggle"><input type="checkbox" id="flashToggle"><span class="track"></span><span>Impact flash on cut</span></label>
+      </div>
+
+      <div class="group">
+        <div class="label">Audio cue</div>
+        <div class="btn-row" id="cueBtns" style="margin-bottom:8px;">
+          <button class="btn sm" data-cue="hit">Hit</button>
+          <button class="btn sm" data-cue="chime">Chime</button>
+          <button class="btn sm" data-cue="click">Click</button>
+          <button class="btn sm" data-cue="none">None</button>
+        </div>
+        <div class="row"><label for="vol">Volume</label><input id="vol" type="range" min="0" max="100" step="1" value="70"><span class="val" id="vol-val">70</span></div>
+        <button class="btn sm" id="testCue" style="width:100%; margin-top:4px;">Test cue</button>
+      </div>
+
+      <div class="group">
+        <div class="label">Stage</div>
+        <label class="toggle"><input type="checkbox" id="progToggle"><span class="track"></span><span>Progress hairline on screen</span></label>
+        <div class="btn-row" style="margin-top:10px;">
+          <button class="btn" id="fsBtn">Fullscreen (F)</button>
+          <button class="btn" id="blackBtn">Blackout (B)</button>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="label">Hotkeys</div>
+        <div class="keys">
+          <kbd>Space</kbd><span>Begin / pause countdown</span>
+          <kbd>R</kbd><span>Reset to thinking</span>
+          <kbd>F</kbd><span>Toggle fullscreen</span>
+          <kbd>B</kbd><span>Blackout (instant cut)</span>
+          <kbd>H</kbd><span>Hide / show this panel</span>
+        </div>
+      </div>
+
+    </div>
+  </aside>
+
+<script>
+(() => {
+  "use strict";
+  const store = {
+    get(k,d){ try{ const v=localStorage.getItem("thinking."+k); return v===null?d:JSON.parse(v);}catch(e){return d;} },
+    set(k,v){ try{ localStorage.setItem("thinking."+k, JSON.stringify(v)); }catch(e){} }
+  };
+  const $ = s => document.querySelector(s);
+  const stage=$("#stage"), wordEl=$("#word"), dotsWrap=$("#dots"),
+        finalEl=$("#final"), ghostField=$("#ghost-field"), clockEl=$("#clock"), stateTag=$("#state-tag"),
+        stageProg=$("#stage-progress"), blackout=$("#blackout"), panel=$("#panel"), hint=$("#hint"), flash=$("#flash"),
+        titleWrap=$("#title-wrap"), root=document.documentElement;
+  let dotsEls=[];
+
+  const PALETTES = {
+    cool:  { name:"Cool",  dots:["#8A93A6","#5B8DEF","#9B7BE8","#4FD1C5"], accent:"#5B8DEF" },
+    ember: { name:"Ember", dots:["#B79A7A","#E8945B","#E85B6B","#F0C04F"], accent:"#E8945B" },
+    mono:  { name:"Mono",  dots:["#6B7280","#9CA3AF","#D1D5DB","#F3F4F6"], accent:"#9CA3AF" },
+    neon:  { name:"Neon",  dots:["#3BE8B0","#39A0ED","#B36BE8","#F45D9E"], accent:"#3BE8B0" }
+  };
+
+  const state = {
+    duration: store.get("duration", 5),
+    elapsed:0, running:false, finished:false, lastTick:0, dotIndex:0, colorStep:0,
+    palette: store.get("palette","mono"),
+    density: store.get("density", 12),
+    driftSec: store.get("drift", 30),
+    ghostAlpha: store.get("ghosta", 60),
+    pulseMs: store.get("pulse", 150),
+    showProg: store.get("showProg", false),
+    titleScale: store.get("tScale", 0.9),
+    revealScale: store.get("rScale", 0.4),
+    ghostScale: store.get("gScale", 1.4),
+    build: store.get("build", true), ticks: store.get("ticks", true), flash: store.get("flash", false),
+    cueType: store.get("cueType", "chime"), cueVol: store.get("cueVol", 70),
+    titleX: store.get("titleX",0), titleY: store.get("titleY",0),
+    revealX: store.get("revealX",0), revealY: store.get("revealY",0),
+    dotCount: store.get("dotCount",3), dotScale: store.get("dotScale",1),
+    stageBg: store.get("stageBg","#0a0c10"), titleInk: store.get("titleInk","#e8ecf2"),
+    ghostColor: store.get("ghostColor","#454b54"), titleOp: store.get("titleOp",100),
+    revealBg: store.get("revealBg","#0a0c10"), revealInk: store.get("revealInk","#e8ecf2"), revealOp: store.get("revealOp",100)
+  };
+
+  function md(str){
+    let s = String(str).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+    s = s.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>').replace(/__([^_]+)__/g,'<strong>$1</strong>');
+    s = s.replace(/\*([^*]+)\*/g,'<em>$1</em>').replace(/_([^_]+)_/g,'<em>$1</em>');
+    return s || '\u00A0';
+  }
+
+  function applyPalette(key){
+    const p = PALETTES[key] || PALETTES.mono;
+    root.style.setProperty("--panel-accent", p.accent);
+    state.palette = key; store.set("palette", key);
+    document.querySelectorAll(".swatch").forEach(s => s.classList.toggle("active", s.dataset.key===key));
+  }
+  function currentDots(){ return (PALETTES[state.palette]||PALETTES.mono).dots; }
+
+  const swWrap=$("#swatches");
+  Object.entries(PALETTES).forEach(([key,p]) => {
+    const el=document.createElement("div"); el.className="swatch"; el.dataset.key=key; el.tabIndex=0; el.setAttribute("role","button");
+    el.innerHTML='<span class="chips">'+p.dots.map(c=>'<i style="background:'+c+'"></i>').join('')+'</span><span>'+p.name+'</span>';
+    el.addEventListener("click",()=>applyPalette(key));
+    el.addEventListener("keydown",e=>{ if(e.key==="Enter"||e.key===" "){e.preventDefault();applyPalette(key);} });
+    swWrap.appendChild(el);
+  });
+
+  /* ---------- ellipsis build ---------- */
+  function buildDots(){
+    dotsWrap.innerHTML="";
+    for(let i=0;i<state.dotCount;i++){ const s=document.createElement("span"); s.className="dot"; dotsWrap.appendChild(s); }
+    dotsEls=[...dotsWrap.querySelectorAll(".dot")];
+    state.dotIndex=0;
+  }
+
+  /* ---------- audio ---------- */
+  let actx=null, audioUnlocked=false;
+  function audio(){ if(!actx){ try{ actx=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} } if(actx&&actx.state==="suspended") actx.resume(); return actx; }
+  function unlock(){ if(audioUnlocked) return; audio(); audioUnlocked=true; }
+  function noiseBurst(ctx,dur){ const n=Math.floor(ctx.sampleRate*dur),b=ctx.createBuffer(1,n,ctx.sampleRate),d=b.getChannelData(0); for(let i=0;i<n;i++) d[i]=Math.random()*2-1; const s=ctx.createBufferSource(); s.buffer=b; return s; }
+  function playCue(){
+    const ctx=audio(); if(!ctx||state.cueType==="none") return;
+    const t=ctx.currentTime, vol=state.cueVol/100, master=ctx.createGain(); master.gain.value=vol; master.connect(ctx.destination);
+    if(state.cueType==="chime"){
+      [784,1176,1568].forEach((f,i)=>{ const o=ctx.createOscillator(),g=ctx.createGain(); o.type="sine"; o.frequency.value=f;
+        g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(0.9/(i+1),t+0.006); g.gain.exponentialRampToValueAtTime(0.0008,t+1.7);
+        o.connect(g).connect(master); o.start(t); o.stop(t+1.8); });
+    } else if(state.cueType==="hit"){
+      const o=ctx.createOscillator(),g=ctx.createGain(); o.type="sine";
+      o.frequency.setValueAtTime(130,t); o.frequency.exponentialRampToValueAtTime(42,t+0.55);
+      g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(1,t+0.008); g.gain.exponentialRampToValueAtTime(0.0008,t+1.3);
+      o.connect(g).connect(master); o.start(t); o.stop(t+1.4);
+      const nb=noiseBurst(ctx,0.09),ng=ctx.createGain(),lp=ctx.createBiquadFilter();
+      lp.type="lowpass"; lp.frequency.value=1600; ng.gain.setValueAtTime(0.7,t); ng.gain.exponentialRampToValueAtTime(0.001,t+0.13);
+      nb.connect(lp).connect(ng).connect(master); nb.start(t);
+    } else if(state.cueType==="click"){
+      const nb=noiseBurst(ctx,0.05),ng=ctx.createGain(),bp=ctx.createBiquadFilter();
+      bp.type="bandpass"; bp.frequency.value=2300; bp.Q.value=0.8; ng.gain.setValueAtTime(0.9,t); ng.gain.exponentialRampToValueAtTime(0.001,t+0.05);
+      nb.connect(bp).connect(ng).connect(master); nb.start(t);
+    }
+  }
+  function playTick(sec){
+    const ctx=audio(); if(!ctx) return;
+    const t=ctx.currentTime, vol=(state.cueVol/100)*0.35, o=ctx.createOscillator(),g=ctx.createGain(); o.type="triangle";
+    o.frequency.value=900+(4-sec)*120; g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(vol,t+0.004); g.gain.exponentialRampToValueAtTime(0.0006,t+0.09);
+    o.connect(g).connect(ctx.destination); o.start(t); o.stop(t+0.1);
+  }
+
+  /* ---------- pulse ---------- */
+  let pulseT=null, tension=0;
+  function pulseStep(){
+    const dots=currentDots();
+    dotsEls.forEach((d,i)=>{
+      const on=i===state.dotIndex; d.classList.toggle("on",on);
+      if(on){ const c=dots[state.colorStep%dots.length]; d.style.background=c; d.style.boxShadow="0 0 "+(dotsEls[0].offsetHeight*0.9)+"px "+c+"66"; }
+      else{ d.style.background=""; d.style.boxShadow="none"; }
+    });
+    state.dotIndex=(state.dotIndex+1)%Math.max(1,dotsEls.length);
+    if(state.dotIndex===0) state.colorStep++;
+    const interval=state.pulseMs*(1-tension*0.72);
+    root.style.setProperty("--pulse-ms", Math.max(60,interval)+"ms");
+    pulseT=setTimeout(pulseStep, Math.max(70,interval));
+  }
+  function startPulse(){ clearTimeout(pulseT); root.style.setProperty("--pulse-ms", state.pulseMs+"ms"); pulseStep(); }
+  function stopPulse(){ clearTimeout(pulseT); dotsEls.forEach(d=>{ d.classList.remove("on"); d.style.boxShadow="none"; }); }
+
+  /* ---------- ghost wall ---------- */
+  const OPENERS=["Let me consider","First, I should","Weighing whether","It seems plausible that","On reflection,","Cross-checking","If I assume","Working through","Reconsidering","One possibility is that","Tracing back","Holding that thought,","Testing the idea that","It follows that","Narrowing down","Setting aside","Suppose instead that","Granting that"];
+  const MIDDLES=["the constraints here","the second interpretation","what the evidence supports","each remaining option","the edge cases","the underlying pattern","the simpler explanation","the intended meaning","the prior step","the competing hypotheses","the missing variable","the boundary condition","the likely outcome","the given context","the counterexample","the dependencies","the ordering of events","the ambiguous phrasing","the stated goal","the hidden assumption"];
+  const TAILS=["before committing.","seems most consistent.","may not hold.","points elsewhere.","is worth revisiting.","resolves cleanly.","needs another pass.","fits the rest.","is probably fine.","raises a question.","changes the estimate.","is the crux.","can be ruled out.","aligns with the goal.","remains uncertain.","comes first.","cannot be right.","is enough for now."];
+  const SHORTS=["…","hmm.","wait —","no, that's off","closer.","not quite.","again.","if / then","unless…","therefore","recomputing","almost","context?","check that","revise","…continue","yes — no.","which leaves…","backtrack","that tracks."];
+  const rnd=a=>a[Math.floor(Math.random()*a.length)];
+  function makeLine(){ return Math.random()<0.32 ? rnd(SHORTS) : (rnd(OPENERS)+" "+rnd(MIDDLES)+" "+rnd(TAILS)); }
+  let ghostT=null, ghostOn=false; const reduceMotion=matchMedia("(prefers-reduced-motion: reduce)").matches; const CAP=110;
+  function spawnGhost(){
+    if(state.density===0 || ghostField.childElementCount>CAP) return;
+    const line=document.createElement("div"); line.className="ghost-line"; line.textContent=makeLine();
+    line.style.left=(2+Math.random()*66)+"vw"; line.style.top=(6+Math.random()*84)+"vh";
+    ghostField.appendChild(line);
+    const alpha=state.ghostAlpha/100, rise=reduceMotion?0:(16+Math.random()*26), dur=state.driftSec*(850+Math.random()*450)/1000;
+    requestAnimationFrame(()=>{ line.style.transition="transform "+dur+"s linear, opacity "+(dur*0.5)+"s ease"; line.style.opacity=String(alpha); line.style.transform="translateY(-"+rise+"vh)"; });
+    setTimeout(()=>{ line.style.opacity="0"; }, dur*560); setTimeout(()=>line.remove(), dur*1000+400);
+  }
+  function scheduleGhost(){
+    clearTimeout(ghostT); if(!ghostOn || state.density===0) return;
+    const eff=Math.min(14, state.density+tension*6), gap=Math.max(110, 1700-eff*150)*(0.65+Math.random()*0.6);
+    ghostT=setTimeout(()=>{ spawnGhost(); if(tension>0.6) spawnGhost(); scheduleGhost(); }, gap);
+  }
+  function startGhost(){ ghostOn=true; scheduleGhost(); }
+  function stopGhost(){ ghostOn=false; clearTimeout(ghostT); }
+  function clearGhost(){ ghostField.innerHTML=""; }
+
+  /* ---------- clock ---------- */
+  function fmt(sec){ sec=Math.max(0,Math.ceil(sec)); const m=Math.floor(sec/60),s=sec%60; return m+":"+String(s).padStart(2,"0"); }
+  function parseDur(str){ str=String(str).trim(); if(str.includes(":")){ const [m,s]=str.split(":"); return (parseInt(m,10)||0)*60+(parseInt(s,10)||0);} return parseInt(str,10)||0; }
+  function updateClock(){ const rem=state.finished?0:Math.max(0,state.duration-state.elapsed); clockEl.textContent=fmt(rem); stageProg.style.width=(state.duration?Math.min(100,state.elapsed/state.duration*100):0)+"%"; }
+  function setTag(){ stateTag.textContent=state.finished?"Revealed":state.running?"Running":"Idle"; stateTag.classList.toggle("run",state.running&&!state.finished); }
+
+  const BUILD_SEC=4; let lastWholeSec=null, raf=null;
+  function loop(ts){
+    if(state.running && !state.finished){
+      if(!state.lastTick) state.lastTick=ts;
+      state.elapsed+=(ts-state.lastTick)/1000; state.lastTick=ts;
+      const rem=state.duration-state.elapsed;
+      tension=state.build?Math.min(1,Math.max(0,(BUILD_SEC-rem)/BUILD_SEC)):0;
+      root.style.setProperty("--tension-scale", 1+tension*0.04);
+      if(state.ticks){ const whole=Math.ceil(rem); if(whole!==lastWholeSec && whole<=3 && whole>=1 && rem>0.02){ playTick(whole); lastWholeSec=whole; } }
+      if(state.elapsed>=state.duration){ finish(); }
+      updateClock();
+    }
+    raf=requestAnimationFrame(loop);
+  }
+
+  /* ---------- transport ---------- */
+  let wakeLock=null;
+  async function requestWake(){ try{ if("wakeLock" in navigator) wakeLock=await navigator.wakeLock.request("screen"); }catch(e){} }
+  function releaseWake(){ try{ wakeLock&&wakeLock.release(); wakeLock=null; }catch(e){} }
+
+  function begin(){ unlock(); if(state.finished) reset(); state.running=true; state.lastTick=0; lastWholeSec=null; setTag(); requestWake(); $("#startBtn").textContent="Pause countdown"; }
+  function pause(){ state.running=false; state.lastTick=0; tension=0; root.style.setProperty("--tension-scale",1); setTag(); releaseWake(); $("#startBtn").textContent="Resume countdown"; }
+  function toggleRun(){ (state.running?pause:begin)(); }
+  function impactFlash(){ if(!state.flash) return; flash.style.transition="none"; flash.style.opacity="1"; requestAnimationFrame(()=>requestAnimationFrame(()=>{ flash.style.transition="opacity 130ms ease"; flash.style.opacity="0"; })); }
+
+  function finish(){
+    state.running=false; state.finished=true; state.elapsed=state.duration; state.lastTick=0; tension=0; releaseWake();
+    finalEl.innerHTML=md($("#final-in").value); root.style.setProperty("--tension-scale",1);
+    stopPulse(); stopGhost(); clearGhost();
+    document.body.classList.add("reveal-scene");
+    stage.classList.add("finished");
+    impactFlash(); playCue();
+    setTag(); updateClock(); $("#startBtn").textContent="Begin countdown";
+  }
+  function reset(){
+    state.running=false; state.finished=false; state.elapsed=0; state.lastTick=0; tension=0; lastWholeSec=null;
+    stage.classList.remove("finished"); document.body.classList.remove("reveal-scene"); root.style.setProperty("--tension-scale",1);
+    releaseWake(); startPulse(); startGhost(); setTag(); updateClock(); $("#startBtn").textContent="Begin countdown";
+  }
+
+  function toggleBlackout(){ blackout.classList.toggle("on"); }
+  function toggleFullscreen(){ if(!document.fullscreenElement){ document.documentElement.requestFullscreen?.(); } else { document.exitFullscreen?.(); } }
+  let panelOpen=false;
+  function togglePanel(force){ panelOpen=force===undefined?!panelOpen:force; panel.classList.toggle("open",panelOpen); if(panelOpen) hint.classList.add("gone"); }
+
+  let idleTimer=null;
+  function poke(){ document.body.classList.remove("cursor-hidden"); clearTimeout(idleTimer); idleTimer=setTimeout(()=>{ if(!panelOpen) document.body.classList.add("cursor-hidden"); },2500); }
+  ["mousemove","mousedown","touchstart"].forEach(e=>addEventListener(e,poke,{passive:true}));
+  ["pointerdown","keydown"].forEach(e=>addEventListener(e,unlock));
+
+  /* ---------- wiring ---------- */
+  $("#startBtn").addEventListener("click",toggleRun);
+  $("#resetBtn").addEventListener("click",reset);
+  $("#fsBtn").addEventListener("click",toggleFullscreen);
+  $("#blackBtn").addEventListener("click",toggleBlackout);
+  $("#testCue").addEventListener("click",()=>{ unlock(); playCue(); });
+
+  const durIn=$("#dur");
+  durIn.addEventListener("change",()=>{ const sec=Math.max(0,parseDur(durIn.value)); state.duration=sec; store.set("duration",sec); durIn.value=fmt(sec); if(!state.running&&!state.finished) updateClock(); });
+  $("#word-in").addEventListener("input",e=>{ wordEl.innerHTML=md(e.target.value); });
+  $("#final-in").addEventListener("input",e=>{ if(state.finished) finalEl.innerHTML=md(e.target.value); });
+
+  function bindRange(id,key,stKey,fmtFn,onChange){
+    const el=$("#"+id),val=$("#"+id+"-val");
+    el.addEventListener("input",()=>{ const v=+el.value; state[stKey]=v; store.set(key,v); val.textContent=fmtFn(v); onChange&&onChange(v); });
+  }
+  bindRange("tScale","tScale","titleScale",v=>v.toFixed(2)+"×",v=>root.style.setProperty("--title-scale",v));
+  bindRange("rScale","rScale","revealScale",v=>v.toFixed(2)+"×",v=>root.style.setProperty("--reveal-scale",v));
+  bindRange("gScale","gScale","ghostScale",v=>v.toFixed(2)+"×",v=>root.style.setProperty("--ghost-scale",v));
+  bindRange("tX","titleX","titleX",v=>String(v),v=>root.style.setProperty("--title-x",v+"vw"));
+  bindRange("tY","titleY","titleY",v=>String(v),v=>root.style.setProperty("--title-y",v+"vh"));
+  bindRange("rX","revealX","revealX",v=>String(v),v=>root.style.setProperty("--reveal-x",v+"vw"));
+  bindRange("rY","revealY","revealY",v=>String(v),v=>root.style.setProperty("--reveal-y",v+"vh"));
+  bindRange("titleOp","titleOp","titleOp",v=>(v/100).toFixed(2),v=>root.style.setProperty("--title-op",v/100));
+  bindRange("revOp","revealOp","revealOp",v=>(v/100).toFixed(2),v=>root.style.setProperty("--reveal-op",v/100));
+  bindRange("pulse","pulse","pulseMs",v=>v+"ms");
+  bindRange("dotScale","dotScale","dotScale",v=>v.toFixed(2)+"×",v=>root.style.setProperty("--dot-scale",v));
+  bindRange("dotCount","dotCount","dotCount",v=>String(v),()=>{ buildDots(); });
+  bindRange("drift","drift","driftSec",v=>v+"s");
+  bindRange("density","density","density",v=>String(v),()=>scheduleGhost());
+  bindRange("ghosta","ghosta","ghostAlpha",v=>(v/100).toFixed(2));
+  bindRange("vol","cueVol","cueVol",v=>String(v));
+
+  function bindColor(id,key,stKey,varName){
+    const el=$("#"+id),val=$("#"+id+"-val");
+    el.addEventListener("input",()=>{ const v=el.value; state[stKey]=v; store.set(key,v); val.textContent=v; if(varName) root.style.setProperty(varName,v); });
+  }
+  bindColor("bgCol","stageBg","stageBg","--bg");
+  bindColor("titleCol","titleInk","titleInk","--title-ink");
+  bindColor("ghostCol","ghostColor","ghostColor","--ghost");
+  bindColor("revBg","revealBg","revealBg","--reveal-bg");
+  bindColor("revInk","revealInk","revealInk","--reveal-ink");
+
+  function setColorInput(id,stKey,varName,value){
+    state[stKey]=value; store.set(id==="revBg"?"revealBg":id, value);
+    $("#"+id).value=value; $("#"+id+"-val").textContent=value; if(varName) root.style.setProperty(varName,value);
+  }
+  $("#blindBtn").addEventListener("click",()=>{
+    setColorInput("revBg","revealBg","--reveal-bg","#ffffff"); store.set("revealBg","#ffffff");
+    setColorInput("revInk","revealInk","--reveal-ink","#000000"); store.set("revealInk","#000000");
+  });
+  $("#matchBtn").addEventListener("click",()=>{
+    setColorInput("revBg","revealBg","--reveal-bg",state.stageBg); store.set("revealBg",state.stageBg);
+    setColorInput("revInk","revealInk","--reveal-ink",state.titleInk); store.set("revealInk",state.titleInk);
+  });
+
+  function bindToggle(id,key,stKey,fn){ const el=$("#"+id); el.addEventListener("change",()=>{ state[stKey]=el.checked; store.set(key,el.checked); fn&&fn(); }); }
+  bindToggle("buildToggle","build","build");
+  bindToggle("ticksToggle","ticks","ticks");
+  bindToggle("flashToggle","flash","flash");
+  bindToggle("progToggle","showProg","showProg",()=>stageProg.classList.toggle("show",state.showProg));
+
+  const cueBtns=$("#cueBtns");
+  function setCue(type){ state.cueType=type; store.set("cueType",type); cueBtns.querySelectorAll(".btn").forEach(b=>b.classList.toggle("active",b.dataset.cue===type)); }
+  cueBtns.querySelectorAll(".btn").forEach(b=>b.addEventListener("click",()=>{ setCue(b.dataset.cue); unlock(); if(b.dataset.cue!=="none") playCue(); }));
+
+  addEventListener("keydown",e=>{
+    const typing=/^(INPUT|TEXTAREA)$/.test(document.activeElement?.tagName||"");
+    if(typing && e.key!=="Escape") return;
+    switch(e.code){
+      case "Space": e.preventDefault(); toggleRun(); break;
+      case "KeyR": reset(); break;
+      case "KeyF": toggleFullscreen(); break;
+      case "KeyB": toggleBlackout(); break;
+      case "KeyH": togglePanel(); break;
+    }
+  });
+
+  /* ---------- init ---------- */
+  function setV(id,v){ const el=$("#"+id); if(el) el.value=v; }
+  function setT(id,t){ const el=$("#"+id+"-val"); if(el) el.textContent=t; }
+  function hydrate(){
+    durIn.value=fmt(state.duration);
+    wordEl.innerHTML=md($("#word-in").value);
+    setV("pulse",state.pulseMs); setT("pulse",state.pulseMs+"ms");
+    setV("drift",state.driftSec); setT("drift",state.driftSec+"s");
+    setV("density",state.density); setT("density",state.density);
+    setV("ghosta",state.ghostAlpha); setT("ghosta",(state.ghostAlpha/100).toFixed(2));
+    setV("vol",state.cueVol); setT("vol",state.cueVol);
+    setV("dotCount",state.dotCount); setT("dotCount",state.dotCount);
+    setV("dotScale",state.dotScale); setT("dotScale",(+state.dotScale).toFixed(2)+"×"); root.style.setProperty("--dot-scale",state.dotScale);
+    setV("tScale",state.titleScale); setT("tScale",(+state.titleScale).toFixed(2)+"×"); root.style.setProperty("--title-scale",state.titleScale);
+    setV("rScale",state.revealScale); setT("rScale",(+state.revealScale).toFixed(2)+"×"); root.style.setProperty("--reveal-scale",state.revealScale);
+    setV("gScale",state.ghostScale); setT("gScale",(+state.ghostScale).toFixed(2)+"×"); root.style.setProperty("--ghost-scale",state.ghostScale);
+    setV("tX",state.titleX); setT("tX",state.titleX); root.style.setProperty("--title-x",state.titleX+"vw");
+    setV("tY",state.titleY); setT("tY",state.titleY); root.style.setProperty("--title-y",state.titleY+"vh");
+    setV("rX",state.revealX); setT("rX",state.revealX); root.style.setProperty("--reveal-x",state.revealX+"vw");
+    setV("rY",state.revealY); setT("rY",state.revealY); root.style.setProperty("--reveal-y",state.revealY+"vh");
+    setV("titleOp",state.titleOp); setT("titleOp",(state.titleOp/100).toFixed(2)); root.style.setProperty("--title-op",state.titleOp/100);
+    setV("revOp",state.revealOp); setT("revOp",(state.revealOp/100).toFixed(2)); root.style.setProperty("--reveal-op",state.revealOp/100);
+    setV("bgCol",state.stageBg); setT("bgCol",state.stageBg); root.style.setProperty("--bg",state.stageBg);
+    setV("titleCol",state.titleInk); setT("titleCol",state.titleInk); root.style.setProperty("--title-ink",state.titleInk);
+    setV("ghostCol",state.ghostColor); setT("ghostCol",state.ghostColor); root.style.setProperty("--ghost",state.ghostColor);
+    setV("revBg",state.revealBg); setT("revBg",state.revealBg); root.style.setProperty("--reveal-bg",state.revealBg);
+    setV("revInk",state.revealInk); setT("revInk",state.revealInk); root.style.setProperty("--reveal-ink",state.revealInk);
+    $("#buildToggle").checked=state.build; $("#ticksToggle").checked=state.ticks; $("#flashToggle").checked=state.flash;
+    $("#progToggle").checked=state.showProg; stageProg.classList.toggle("show",state.showProg);
+    setCue(state.cueType); applyPalette(state.palette);
+    updateClock(); setTag();
+  }
+
+  hydrate(); buildDots(); startPulse(); startGhost(); raf=requestAnimationFrame(loop);
+  setTimeout(()=>hint.classList.add("gone"),5000);
+})();
+</script>
+</body>
+</html>
