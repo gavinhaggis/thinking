@@ -26,8 +26,19 @@
     -webkit-mask-image: linear-gradient(180deg, transparent, #000 12%, #000 88%, transparent);
             mask-image: linear-gradient(180deg, transparent, #000 12%, #000 88%, transparent); }
   .ghost-line{ position: absolute; font-family: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
-    font-size: calc(clamp(11px, 1.4vmin, 21px) * var(--ghost-scale)); letter-spacing: 0.02em; color: var(--ghost);
-    opacity: 0; max-width: 62vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; will-change: transform, opacity; }
+    font-size: calc(clamp(11px, 1.4vmin, 21px) * var(--ghost-scale) * var(--layer-font, 1)); letter-spacing: 0.02em; color: var(--ghost);
+    opacity: 0; max-width: 90vw; will-change: transform, opacity, filter; }
+  .ghost-line .tw{ display:inline-block; overflow:hidden; white-space:nowrap; vertical-align:bottom;
+    -webkit-clip-path: inset(0 100% 0 0); clip-path: inset(0 100% 0 0); }
+  .ghost-line .cd-kw{ color:#C792EA; } .ghost-line .cd-str{ color:#C3E88D; } .ghost-line .cd-num{ color:#F78C6C; }
+  .ghost-line .cd-cm{ color:#6B7280; font-style:italic; }
+  .ghost-line.glitch{ animation: ghostGlitch 220ms steps(2,end); }
+  @keyframes ghostGlitch{
+    0%,100%{ text-shadow:none; }
+    25%{ text-shadow:-2px 0 #ff2b6d, 2px 0 #22d3ee; }
+    55%{ text-shadow:2px 0 #ff2b6d, -2px 0 #22d3ee; }
+    80%{ text-shadow:-1px 0 #ff2b6d, 1px 0 #22d3ee; }
+  }
   #title-wrap{ position: relative; display: flex; align-items: baseline; gap: 0.06em; line-height: 1;
     transform: translate(var(--title-x), var(--title-y)) scale(var(--tension-scale)); transition: none; }
   #word{ font-weight: 300; letter-spacing: 0.01em; color: var(--title-ink); opacity: var(--title-op);
@@ -55,6 +66,24 @@
   #hint{ position: fixed; left:50%; bottom:4vh; transform: translateX(-50%); font-size:12px; letter-spacing:0.14em;
     text-transform:uppercase; color:var(--panel-mute); background: rgba(0,0,0,0.35); padding:7px 14px; border-radius:999px; z-index:40; transition: opacity 600ms ease; }
   #hint.gone{ opacity: 0; pointer-events: none; }
+  #scanlines{ position: fixed; inset:0; z-index:3; pointer-events:none; opacity:0.5;
+    background-image: repeating-linear-gradient(180deg, rgba(255,255,255,0.035) 0px, rgba(255,255,255,0.035) 1px, transparent 2px, transparent 3px);
+    mix-blend-mode: overlay; }
+  #scanlines::after{ content:""; position:absolute; left:0; right:0; top:-22vh; height:22vh;
+    background: linear-gradient(180deg, transparent, rgba(120,170,255,0.07), transparent);
+    animation: scanSweep 9s linear infinite; }
+  #scanlines.off{ display:none; }
+  @keyframes scanSweep{ 0%{ transform: translateY(0); } 100%{ transform: translateY(140vh); } }
+  .term-cursor{ display:inline-block; width:0.5em; height:0.8em; margin-left:0.2em; background:var(--ghost);
+    vertical-align:-0.08em; transform: scale(var(--dot-scale,1)); animation: blinkCursor 1s steps(1,end) infinite; }
+  .term-cursor.off{ display:none; }
+  @keyframes blinkCursor{ 0%,49%{ opacity:1; } 50%,100%{ opacity:0; } }
+  #hud{ position:fixed; top:18px; right:18px; z-index:5; font-family: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    font-size:11px; letter-spacing:0.06em; color:var(--panel-mute); text-align:right; pointer-events:none; opacity:0.85; display:grid; gap:4px; }
+  #hud.hidden{ display:none; }
+  .hud-row{ display:flex; justify-content:flex-end; gap:8px; }
+  .hud-k{ color:var(--panel-mute); }
+  .hud-v{ color:var(--ink); font-variant-numeric:tabular-nums; min-width:64px; }
   #panel{ position: fixed; top:0; left:0; bottom:0; width: min(374px, 92vw); background: var(--panel-bg);
     border-right:1px solid var(--panel-line); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
     color: var(--panel-ink); z-index:60; transform: translateX(-102%);
@@ -96,19 +125,29 @@
   .status .big{ font-size:30px; font-weight:300; font-variant-numeric:tabular-nums; letter-spacing:0.02em; color:var(--ink); }
   .status .tag{ font-size:10px; letter-spacing:0.16em; text-transform:uppercase; color:var(--panel-mute); border:1px solid var(--panel-line); border-radius:999px; padding:3px 9px; margin-left:auto; }
   .status .tag.run{ color:#7EE0A8; border-color:rgba(126,224,168,0.35); }
-  @media (prefers-reduced-motion: reduce){ .ghost-line, .dot, #panel{ transition-duration: 0.001ms !important; } }
+  @media (prefers-reduced-motion: reduce){
+    .ghost-line, .dot, #panel, .ghost-line .tw{ transition-duration: 0.001ms !important; }
+    #scanlines::after, .term-cursor{ animation: none !important; }
+    .term-cursor{ opacity: 1 !important; }
+  }
 </style>
 </head>
 <body>
+  <div id="scanlines" aria-hidden="true"></div>
   <div id="ghost-field" aria-hidden="true"></div>
   <div id="stage">
-    <div id="title-wrap"><span id="word">Thinking</span><span id="dots"></span></div>
+    <div id="title-wrap"><span id="word">Thinking</span><span id="dots"></span><span id="termCursor" class="term-cursor" aria-hidden="true"></span></div>
     <div id="final"></div>
   </div>
   <div id="stage-progress"></div>
   <div id="flash"></div>
   <div id="blackout"></div>
   <div id="hint">Press&nbsp; <b>H</b> &nbsp;for controls</div>
+  <div id="hud" aria-hidden="true">
+    <div class="hud-row"><span class="hud-k">TOKENS</span><span class="hud-v" id="hudTok">0</span></div>
+    <div class="hud-row"><span class="hud-k">LATENCY</span><span class="hud-v" id="hudLat">0ms</span></div>
+    <div class="hud-row"><span class="hud-k">CONTEXT</span><span class="hud-v" id="hudCtx">0%</span></div>
+  </div>
 
   <aside id="panel" aria-label="Producer controls">
     <div class="panel-head"><h1>Thinking · Console</h1><span class="k">H&nbsp;to hide</span></div>
@@ -176,6 +215,13 @@
         <label class="toggle"><input type="checkbox" id="flashToggle"><span class="track"></span><span>Impact flash on cut</span></label>
       </div>
       <div class="group">
+        <div class="label">Terminal FX</div>
+        <label class="toggle"><input type="checkbox" id="cursorToggle" checked><span class="track"></span><span>Blinking terminal cursor</span></label>
+        <label class="toggle"><input type="checkbox" id="scanToggle" checked><span class="track"></span><span>Scanline overlay</span></label>
+        <label class="toggle"><input type="checkbox" id="glitchToggle" checked><span class="track"></span><span>Glitch flicker on wall text</span></label>
+        <label class="toggle"><input type="checkbox" id="hudToggle" checked><span class="track"></span><span>HUD readouts (tokens / latency)</span></label>
+      </div>
+      <div class="group">
         <div class="label">Audio cue</div>
         <div class="btn-row" id="cueBtns" style="margin-bottom:8px;">
           <button class="btn sm" data-cue="hit">Hit</button><button class="btn sm" data-cue="chime">Chime</button>
@@ -215,21 +261,21 @@
   const CONFIG = {
     text:          "*Thinking*",   // title (supports **bold** / *italic*)
     reveal:        "Thought.",      // message shown at the hard cut
-    duration:      "0:10",          // m:ss or seconds
+    duration:      "0:05",          // m:ss or seconds
 
-    palette:       "ember",          // cool | ember | mono | neon  (dot colour cycle)
+    palette:       "mono",          // cool | ember | mono | neon  (dot colour cycle)
     bg:            "#0a0c10",       // thinking-scene background
     titleColor:    "#e8ecf2",       // title text
     wallText:      "#454b54",       // drifting reasoning wall
-    revealBg:      "#ffffff",       // background at the cut (try #ffffff)
-    revealText:    "#000000",       // reveal text          (try #000000)
+    revealBg:      "#0a0c10",       // background at the cut (try #ffffff)
+    revealText:    "#e8ecf2",       // reveal text          (try #000000)
 
-    pulse:         600,             // ms per ellipsis step
+    pulse:         150,             // ms per ellipsis step
     dots:          3,               // number of ellipsis dots
     dotSize:       1,               // ellipsis size multiplier
     density:       12,              // wall density 0–12
-    visibility:    0.30,            // wall opacity 0–0.60
-    drift:         3,              // wall drift seconds
+    visibility:    0.60,            // wall opacity 0–0.60
+    drift:         30,              // wall drift seconds
 
     titleScale:    0.9,             // title size multiplier
     revealScale:   0.4,             // reveal size multiplier
@@ -246,6 +292,11 @@
     flash:  false,                  // impact flash on cut
     progress: false,                // progress hairline on screen
 
+    cursor:    true,                // blinking terminal cursor next to the ellipsis
+    scanlines: true,                // CRT-style scanline overlay
+    glitch:    true,                // occasional glitch flicker on wall text
+    hud:       true,                // corner HUD readouts (tokens / latency / context)
+
     remember: true                  // persist live tweaks in this browser
   };
 
@@ -256,7 +307,8 @@
   const $ = s => document.querySelector(s);
   const stage=$("#stage"), wordEl=$("#word"), dotsWrap=$("#dots"), finalEl=$("#final"), ghostField=$("#ghost-field"),
         clockEl=$("#clock"), stateTag=$("#state-tag"), stageProg=$("#stage-progress"), blackout=$("#blackout"),
-        panel=$("#panel"), hint=$("#hint"), flash=$("#flash"), titleWrap=$("#title-wrap"), root=document.documentElement, durIn=$("#dur");
+        panel=$("#panel"), hint=$("#hint"), flash=$("#flash"), titleWrap=$("#title-wrap"), root=document.documentElement, durIn=$("#dur"),
+        termCursor=$("#termCursor"), scanlinesEl=$("#scanlines"), hud=$("#hud");
   let dotsEls=[];
 
   /* hoisted helpers used during config resolution */
@@ -288,7 +340,8 @@
     {f:"titleX",s:"titleX",k:"int"}, {f:"titleY",s:"titleY",k:"int"}, {f:"revealX",s:"revealX",k:"int"}, {f:"revealY",s:"revealY",k:"int"},
     {f:"titleOpacity",s:"titleOp",k:"opacity"}, {f:"revealOpacity",s:"revealOp",k:"opacity"},
     {f:"cue",s:"cueType",k:"str"}, {f:"volume",s:"cueVol",k:"int"},
-    {f:"build",s:"build",k:"bool"}, {f:"ticks",s:"ticks",k:"bool"}, {f:"flash",s:"flash",k:"bool"}, {f:"progress",s:"showProg",k:"bool"}
+    {f:"build",s:"build",k:"bool"}, {f:"ticks",s:"ticks",k:"bool"}, {f:"flash",s:"flash",k:"bool"}, {f:"progress",s:"showProg",k:"bool"},
+    {f:"cursor",s:"cursorOn",k:"bool"}, {f:"scanlines",s:"scanOn",k:"bool"}, {f:"glitch",s:"glitch",k:"bool"}, {f:"hud",s:"hud",k:"bool"}
   ];
   const state = { elapsed:0, running:false, finished:false, lastTick:0, dotIndex:0, colorStep:0 };
   FIELDS.forEach(({f,s,k})=>{
@@ -305,11 +358,22 @@
     mono:  { name:"Mono",  dots:["#6B7280","#9CA3AF","#D1D5DB","#F3F4F6"], accent:"#9CA3AF" },
     neon:  { name:"Neon",  dots:["#3BE8B0","#39A0ED","#B36BE8","#F45D9E"], accent:"#3BE8B0" }
   };
+  function escapeHtml(str){ return String(str).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
   function md(str){
-    let s=String(str).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+    let s=escapeHtml(str);
     s=s.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>').replace(/__([^_]+)__/g,'<strong>$1</strong>');
     s=s.replace(/\*([^*]+)\*/g,'<em>$1</em>').replace(/_([^_]+)_/g,'<em>$1</em>');
     return s || '\u00A0';
+  }
+  const CODE_TOKEN_RE=/(\/\/[^\n]*)|(`[^`]*`|"[^"]*"|'[^']*')|(\b(?:const|let|var|function|return|if|else|for|while|await|async|import|from|export|default|class|new|throw|try|catch|typeof|instanceof|extends|of|in|null|undefined|true|false|this|type)\b)|(\b\d+(?:\.\d+)?\b)/g;
+  function codeHighlight(str){
+    return escapeHtml(str).replace(CODE_TOKEN_RE,(m,cm,s,kw,num)=>{
+      if(cm) return '<span class="cd-cm">'+cm+'</span>';
+      if(s)  return '<span class="cd-str">'+s+'</span>';
+      if(kw) return '<span class="cd-kw">'+kw+'</span>';
+      if(num) return '<span class="cd-num">'+num+'</span>';
+      return m;
+    });
   }
   function applyPalette(key, persist){
     const p=PALETTES[key]||PALETTES.mono; root.style.setProperty("--panel-accent", p.accent);
@@ -376,16 +440,75 @@
   const MIDDLES=["the constraints here","the second interpretation","what the evidence supports","each remaining option","the edge cases","the underlying pattern","the simpler explanation","the intended meaning","the prior step","the competing hypotheses","the missing variable","the boundary condition","the likely outcome","the given context","the counterexample","the dependencies","the ordering of events","the ambiguous phrasing","the stated goal","the hidden assumption"];
   const TAILS=["before committing.","seems most consistent.","may not hold.","points elsewhere.","is worth revisiting.","resolves cleanly.","needs another pass.","fits the rest.","is probably fine.","raises a question.","changes the estimate.","is the crux.","can be ruled out.","aligns with the goal.","remains uncertain.","comes first.","cannot be right.","is enough for now."];
   const SHORTS=["…","hmm.","wait —","no, that's off","closer.","not quite.","again.","if / then","unless…","therefore","recomputing","almost","context?","check that","revise","…continue","yes — no.","which leaves…","backtrack","that tracks."];
+  const CODE_LINES=[
+    "$ npm run test -- --watch=false","$ git diff --stat","> 3 files changed, 42 insertions(+), 7 deletions(-)",
+    "const result = await parseConfig(input);","if (!result.ok) throw new Error(\"invalid schema\");",
+    "function reconcile(prev, next) {","  return next.id === prev.id ? merge(prev, next) : next;","}",
+    "[INFO] compiling 214 modules...","[WARN] deprecated API: fs.exists","src/utils/parser.ts:142",
+    "class TokenStream extends Iterator {","export default function useDebounce(value, delay) {",
+    "try { await tx.commit(); } catch (e) { rollback(); }","context window: 84% · 12402 tokens","latency: 340ms",
+    "{ \"status\": \"ok\", \"retries\": 0 }","for (const file of changedFiles) lint(file);",
+    "// re-check the boundary condition","import { z } from \"zod\";",
+    "type Result<T> = { ok: true; value: T } | { ok: false };","const cache = new Map();",
+    "await Promise.all(tasks.map(run));","diff --git a/src/index.ts b/src/index.ts","grep -rn \"TODO\" src/**/*.ts",
+    "$ tsc --noEmit","0 errors, 2 warnings","return next.state === \"idle\" ? tick() : wait();"
+  ];
   const rnd=a=>a[Math.floor(Math.random()*a.length)];
-  function makeLine(){ return Math.random()<0.32 ? rnd(SHORTS) : (rnd(OPENERS)+" "+rnd(MIDDLES)+" "+rnd(TAILS)); }
   let ghostT=null, ghostOn=false; const reduceMotion=matchMedia("(prefers-reduced-motion: reduce)").matches; const CAP=110;
+
+  /* full-bleed column bag: visits every column once per cycle before repeating, so the
+     wall covers the whole width instead of clustering in a centered band */
+  let colBag=[];
+  function nextLeftVW(){
+    if(!colBag.length){
+      const COLS=12, w=100/COLS;
+      colBag=Array.from({length:COLS},(_,i)=>i*w+Math.random()*w*0.5);
+      for(let i=colBag.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [colBag[i],colBag[j]]=[colBag[j],colBag[i]]; }
+    }
+    return colBag.pop();
+  }
+  /* depth bands for parallax: far lines sit smaller/blurred/slower, near lines sit larger/faster/glowing */
+  function pickLayer(){
+    const r=Math.random();
+    if(r<0.42) return {font:0.72, blur:1.1, opMul:0.5, speedMul:0.62, rise:0.6, glow:false};
+    if(r<0.78) return {font:1.0,  blur:0,   opMul:0.82, speedMul:1.0,  rise:1.0, glow:false};
+    return       {font:1.32, blur:0,   opMul:1.0,  speedMul:1.42, rise:1.3, glow:true};
+  }
+  function pickContent(){
+    const r=Math.random();
+    if(r<0.5)  return {text:rnd(CODE_LINES), code:true};
+    if(r<0.82) return {text:rnd(SHORTS), code:false};
+    return {text:rnd(OPENERS)+" "+rnd(MIDDLES)+" "+rnd(TAILS), code:false};
+  }
   function spawnGhost(){
     if(state.density===0 || ghostField.childElementCount>CAP) return;
-    const line=document.createElement("div"); line.className="ghost-line"; line.textContent=makeLine();
-    line.style.left=(2+Math.random()*66)+"vw"; line.style.top=(6+Math.random()*84)+"vh"; ghostField.appendChild(line);
-    const alpha=state.ghostAlpha/100, rise=reduceMotion?0:(16+Math.random()*26), dur=state.driftSec*(850+Math.random()*450)/1000;
-    requestAnimationFrame(()=>{ line.style.transition="transform "+dur+"s linear, opacity "+(dur*0.5)+"s ease"; line.style.opacity=String(alpha); line.style.transform="translateY(-"+rise+"vh)"; });
+    const layer=pickLayer(), content=pickContent();
+    const line=document.createElement("div"); line.className="ghost-line";
+    line.style.setProperty("--layer-font", layer.font);
+    if(layer.blur) line.style.filter="blur("+layer.blur+"px)";
+    if(layer.glow) line.style.textShadow="0 0 14px "+currentDots()[0]+"66";
+    const left=Math.min(94, Math.max(1, nextLeftVW())), maxW=Math.max(16, 98-left);
+    line.style.left=left+"vw"; line.style.maxWidth=maxW+"vw"; line.style.top=(6+Math.random()*84)+"vh";
+    const tw=document.createElement("span"); tw.className="tw";
+    tw.innerHTML=content.code ? codeHighlight(content.text) : escapeHtml(content.text);
+    line.appendChild(tw); ghostField.appendChild(line);
+
+    const alpha=(state.ghostAlpha/100)*layer.opMul;
+    const rise=reduceMotion?0:(1+Math.random()*26)*layer.rise;
+    const dur=(state.driftSec*(85+Math.random()*450)/1000)/layer.speedMul;
+    requestAnimationFrame(()=>{
+      line.style.transition="transform "+dur+"s linear, opacity "+(dur*0.5)+"s ease";
+      line.style.opacity=String(alpha); line.style.transform="translateY(-"+rise+"vh)";
+      requestAnimationFrame(()=>{
+        const chars=content.text.length, typeDur=Math.min(1.4, Math.max(0.3, chars*0.022));
+        tw.style.transition="clip-path "+typeDur+"s steps("+Math.max(6,chars)+", end)";
+        tw.style.clipPath="inset(0 0 0 0)"; tw.style.webkitClipPath="inset(0 0 0 0)";
+      });
+    });
     setTimeout(()=>{ line.style.opacity="0"; }, dur*560); setTimeout(()=>line.remove(), dur*1000+400);
+    if(state.glitch && !reduceMotion && Math.random()<0.1){
+      setTimeout(()=>{ if(line.isConnected){ line.classList.add("glitch"); setTimeout(()=>line.classList.remove("glitch"),240); } }, 200+Math.random()*dur*500);
+    }
   }
   function scheduleGhost(){ clearTimeout(ghostT); if(!ghostOn || state.density===0) return;
     const eff=Math.min(14, state.density+tension*6), gap=Math.max(110, 1700-eff*150)*(0.65+Math.random()*0.6);
@@ -393,6 +516,17 @@
   function startGhost(){ ghostOn=true; scheduleGhost(); }
   function stopGhost(){ ghostOn=false; clearTimeout(ghostT); }
   function clearGhost(){ ghostField.innerHTML=""; }
+
+  /* ---------- hud ---------- */
+  let hudT=null, hudTokens=0;
+  function hudVisible(v){ hud.classList.toggle("hidden", !v); }
+  function hudTick(){
+    hudTokens+=4+Math.floor(Math.random()*9);
+    const lat=180+Math.floor(Math.random()*260), ctx=Math.min(97, 8+Math.floor(hudTokens/40)+Math.floor(Math.random()*3));
+    $("#hudTok").textContent=hudTokens.toLocaleString(); $("#hudLat").textContent=lat+"ms"; $("#hudCtx").textContent=ctx+"%";
+  }
+  function startHud(){ if(!state.hud) return; hudTick(); clearInterval(hudT); hudT=setInterval(hudTick,550); hudVisible(true); }
+  function stopHud(){ clearInterval(hudT); }
 
   /* ---------- clock ---------- */
   function updateClock(){ const rem=state.finished?0:Math.max(0,state.duration-state.elapsed); clockEl.textContent=fmt(rem); stageProg.style.width=(state.duration?Math.min(100,state.elapsed/state.duration*100):0)+"%"; }
@@ -420,13 +554,13 @@
   function finish(){
     state.running=false; state.finished=true; state.elapsed=state.duration; state.lastTick=0; tension=0; releaseWake();
     finalEl.innerHTML=md(state.revealText); root.style.setProperty("--tension-scale",1);
-    stopPulse(); stopGhost(); clearGhost(); document.body.classList.add("reveal-scene"); stage.classList.add("finished");
+    stopPulse(); stopGhost(); clearGhost(); stopHud(); hudVisible(false); document.body.classList.add("reveal-scene"); stage.classList.add("finished");
     impactFlash(); playCue(); setTag(); updateClock(); $("#startBtn").textContent="Begin countdown";
   }
   function reset(){
     state.running=false; state.finished=false; state.elapsed=0; state.lastTick=0; tension=0; lastWholeSec=null;
     stage.classList.remove("finished"); document.body.classList.remove("reveal-scene"); root.style.setProperty("--tension-scale",1);
-    releaseWake(); startPulse(); startGhost(); setTag(); updateClock(); $("#startBtn").textContent="Begin countdown";
+    releaseWake(); startPulse(); startGhost(); startHud(); setTag(); updateClock(); $("#startBtn").textContent="Begin countdown";
   }
   function toggleBlackout(){ blackout.classList.toggle("on"); }
   function toggleFullscreen(){ if(!document.fullscreenElement){ document.documentElement.requestFullscreen?.(); } else { document.exitFullscreen?.(); } }
@@ -477,6 +611,10 @@
   function bindToggle(id,key,stKey,fn){ const el=$("#"+id); el.addEventListener("change",()=>{ state[stKey]=el.checked; save(key,el.checked); fn&&fn(); }); }
   bindToggle("buildToggle","build","build"); bindToggle("ticksToggle","ticks","ticks"); bindToggle("flashToggle","flash","flash");
   bindToggle("progToggle","showProg","showProg",()=>stageProg.classList.toggle("show",state.showProg));
+  bindToggle("cursorToggle","cursor","cursorOn",()=>termCursor.classList.toggle("off",!state.cursorOn));
+  bindToggle("scanToggle","scanlines","scanOn",()=>scanlinesEl.classList.toggle("off",!state.scanOn));
+  bindToggle("glitchToggle","glitch","glitch");
+  bindToggle("hudToggle","hud","hud",()=>{ if(state.hud){ if(!state.finished) startHud(); } else { stopHud(); hudVisible(false); } });
 
   const cueBtns=$("#cueBtns");
   function setCue(type,persist){ state.cueType=type; if(persist) save("cueType",type); cueBtns.querySelectorAll(".btn").forEach(b=>b.classList.toggle("active",b.dataset.cue===type)); }
@@ -528,11 +666,15 @@
     ["bgCol|stageBg|--bg","titleCol|titleInk|--title-ink","ghostCol|ghostColor|--ghost","revBg|revealBg|--reveal-bg","revInk|revealInk|--reveal-ink"].forEach(t=>{ const a=t.split("|"); setV(a[0],state[a[1]]); setT(a[0],state[a[1]]); root.style.setProperty(a[2],state[a[1]]); });
     $("#buildToggle").checked=state.build; $("#ticksToggle").checked=state.ticks; $("#flashToggle").checked=state.flash;
     $("#progToggle").checked=state.showProg; stageProg.classList.toggle("show",state.showProg);
+    $("#cursorToggle").checked=state.cursorOn; termCursor.classList.toggle("off",!state.cursorOn);
+    $("#scanToggle").checked=state.scanOn; scanlinesEl.classList.toggle("off",!state.scanOn);
+    $("#glitchToggle").checked=state.glitch;
+    $("#hudToggle").checked=state.hud;
     setCue(state.cueType,false); applyPalette(state.palette,false);
     updateClock(); setTag();
   }
 
-  hydrate(); buildDots(); startPulse(); startGhost(); raf=requestAnimationFrame(loop);
+  hydrate(); buildDots(); startPulse(); startGhost(); startHud(); raf=requestAnimationFrame(loop);
   setTimeout(()=>hint.classList.add("gone"),5000);
 })();
 </script>
